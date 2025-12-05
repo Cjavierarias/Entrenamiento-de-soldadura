@@ -779,6 +779,7 @@
                 elements.videoStream.srcObject = cameraStream;
                 
                 elements.videoStream.onloadedmetadata = () => {
+                    console.log('✅ Metadatos del video cargados');
                     elements.loadingStatus.textContent = 'Configurando procesamiento...';
                     
                     // Configurar canvas
@@ -790,13 +791,18 @@
                     
                     canvas.width = videoWidth;
                     canvas.height = videoHeight;
-                    
+                    console.log(`Resolución del video: ${videoWidth}x${videoHeight}`);
                     // Mostrar interfaz
                     elements.appContainer.style.display = 'block';
                     elements.loadingScreen.style.opacity = '0';
                     
                     setTimeout(() => {
+                        // Configurar canvas
+                        canvas.width = videoWidth;
+                        canvas.height = videoHeight;
+                    
                         elements.loadingScreen.style.display = 'none';
+                       // Iniciar procesamiento
                         startProcessing();
                     }, 500);
                     
@@ -820,83 +826,209 @@
         // PROCESAMIENTO DE VIDEO Y DETECCIÓN
         // ============================================
         
-        function startProcessing() {
-            if (isProcessing) return;
-            
-            isProcessing = true;
-            processFrame();
-        }
+       function startProcessing() {
+    if (isProcessing) return;
+    
+    // Esperar a que el video esté listo
+    if (!elements.videoStream.readyState || elements.videoStream.readyState < 2) {
+        console.log('Esperando que el video esté listo...');
+        setTimeout(startProcessing, 100);
+        return;
+    }
+    
+    // Configurar canvas con las dimensiones correctas
+    const videoWidth = elements.videoStream.videoWidth;
+    const videoHeight = elements.videoStream.videoHeight;
+    
+    if (videoWidth && videoHeight) {
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
+        
+        // Ajustar visualmente el canvas
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.objectFit = 'cover';
+        
+        console.log(`Canvas configurado: ${videoWidth}x${videoHeight}`);
+    }
+    
+    isProcessing = true;
+    console.log('✅ Procesamiento iniciado');
+    processFrame();
+}
         
         function processFrame() {
-            if (!isProcessing || !cv) return;
-            
-            try {
-                // Crear imagen desde el video
-                const src = new cv.Mat(elements.videoStream.videoHeight, 
-                                      elements.videoStream.videoWidth, 
-                                      cv.CV_8UC4);
-                
-                const cap = new cv.VideoCapture(elements.videoStream);
-                cap.read(src);
-                
-                // Convertir a escala de grises
-                const gray = new cv.Mat();
-                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-                
-                // Detectar patrón de ajedrez
-                const patternSize = new cv.Size(CONFIG.PATTERN_SIZE.cols - 1, 
-                                               CONFIG.PATTERN_SIZE.rows - 1);
-                const corners = new cv.Mat();
-                const found = cv.findChessboardCorners(gray, patternSize, corners,
-                    cv.CALIB_CB_ADAPTIVE_THRESH + cv.CALIB_CB_NORMALIZE_IMAGE + cv.CALIB_CB_FAST_CHECK);
-                
-                if (found) {
-                    // Refinar detección de esquinas
-                    const termCriteria = new cv.TermCriteria(cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_COUNT, 30, 0.1);
-                    cv.cornerSubPix(gray, corners, new cv.Size(11, 11), new cv.Size(-1, -1), termCriteria);
-                    
-                    // Calcular pose
-                    const objectPoints = createObjectPoints();
-                    const cameraMatrix = estimateCameraMatrix();
-                    const distCoeffs = new cv.Mat.zeros(5, 1, cv.CV_64F);
-                    
-                    const rvec = new cv.Mat();
-                    const tvec = new cv.Mat();
-                    
-                    cv.solvePnP(objectPoints, corners, cameraMatrix, distCoeffs, rvec, tvec);
-                    
-                    // Actualizar pose actual
-                    updatePose(rvec, tvec);
-                    
-                    // Dibujar overlay
-                    drawOverlay(src, corners, patternSize);
-                    
-                    // Limpiar matrices
-                    rvec.delete();
-                    tvec.delete();
-                    distCoeffs.delete();
-                    cameraMatrix.delete();
-                } else {
-                    // Patrón no detectado
-                    handlePatternNotFound();
-                }
-                
-                // Dibujar guías visuales
-                drawVisualGuides();
-                
-                // Limpiar memoria
-                src.delete();
-                gray.delete();
-                corners.delete();
-                
-                // Procesar siguiente frame
-                requestAnimationFrame(processFrame);
-                
-            } catch (error) {
-                console.error('Error en procesamiento:', error);
-                setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
-            }
+    if (!isProcessing || !cv || !elements.videoStream.readyState) return;
+    
+    try {
+        // VERIFICAR que el video tenga dimensiones válidas
+        const videoWidth = elements.videoStream.videoWidth;
+        const videoHeight = elements.videoStream.videoHeight;
+        
+        if (!videoWidth || !videoHeight || videoWidth === 0 || videoHeight === 0) {
+            console.log('Esperando dimensiones del video...');
+            setTimeout(processFrame, 100);
+            return;
         }
+        
+        // Crear matriz con las dimensiones EXACTAS del video
+        const src = new cv.Mat(videoHeight, videoWidth, cv.CV_8UC4);
+        
+        // Capturar frame del video
+        const cap = new cv.VideoCapture(elements.videoStream);
+        
+        // Verificar que la captura funcione
+        try {
+            cap.read(src);
+        } catch (captureError) {
+            console.warn('Error capturando frame:', captureError);
+            src.delete();
+            setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
+            return;
+        }
+        
+        // Verificar que la matriz tenga datos
+        if (src.empty()) {
+            console.log('Frame vacío, esperando...');
+            src.delete();
+            setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
+            return;
+        }
+        
+        // Convertir a escala de grises
+        const gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        
+        // Detectar patrón de ajedrez (4×4 significa 3×3 esquinas internas)
+        const patternSize = new cv.Size(3, 3); // 4x4 patrón -> 3x3 esquinas internas
+        const corners = new cv.Mat();
+        
+        // Usar diferentes flags para mejor detección
+        const flags = cv.CALIB_CB_ADAPTIVE_THRESH + 
+                     cv.CALIB_CB_NORMALIZE_IMAGE + 
+                     cv.CALIB_CB_FAST_CHECK;
+        
+        const found = cv.findChessboardCorners(gray, patternSize, corners, flags);
+        
+        if (found && corners.rows > 0) {
+            console.log('✅ Patrón detectado! Esquinas:', corners.rows);
+            
+            // Refinar detección de esquinas
+            const termCriteria = new cv.TermCriteria(
+                cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_COUNT, 
+                30, 
+                0.01
+            );
+            
+            const winSize = new cv.Size(5, 5);
+            const zeroZone = new cv.Size(-1, -1);
+            
+            cv.cornerSubPix(gray, corners, winSize, zeroZone, termCriteria);
+            
+            // Dibujar esquinas detectadas
+            cv.drawChessboardCorners(src, patternSize, corners, found);
+            
+            // Actualizar UI
+            document.getElementById('markerStatus').textContent = '✅ Patrón detectado';
+            document.getElementById('markerStatus').style.color = '#0f0';
+            
+            // Limpiar matrices temporales
+            gray.delete();
+            corners.delete();
+            
+        } else {
+            // Patrón no detectado
+            console.log('🔍 Buscando patrón...');
+            document.getElementById('markerStatus').textContent = '🔍 Buscando patrón 4×4...';
+            document.getElementById('markerStatus').style.color = '#ff0';
+            
+            // Dibujar mensaje de ayuda en el canvas
+            drawHelpMessage();
+        }
+        
+        // Mostrar el frame procesado en el canvas
+        displayProcessedFrame(src);
+        
+        // Liberar memoria
+        src.delete();
+        
+        // Procesar siguiente frame
+        if (isProcessing) {
+            requestAnimationFrame(processFrame);
+        }
+        
+    } catch (error) {
+        console.error('Error en procesamiento:', error);
+        
+        // Manejo específico del error de dimensiones
+        if (error.message.includes('Bad size of input mat')) {
+            console.log('Reiniciando procesamiento con nuevas dimensiones...');
+            isProcessing = false;
+            setTimeout(() => {
+                if (elements.videoStream.readyState >= 2) { // HAVE_CURRENT_DATA o más
+                    isProcessing = true;
+                    processFrame();
+                }
+            }, 500);
+        } else {
+            setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
+        }
+    }
+}
+
+// Nueva función para mostrar el frame procesado
+function displayProcessedFrame(src) {
+    if (!ctx) return;
+    
+    // Limpiar canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Crear ImageData desde la matriz
+    const imgData = new ImageData(
+        new Uint8ClampedArray(src.data),
+        src.cols,
+        src.rows
+    );
+    
+    // Crear bitmap temporal
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = src.cols;
+    tempCanvas.height = src.rows;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Dibujar en canvas temporal
+    tempCtx.putImageData(imgData, 0, 0);
+    
+    // Escalar al tamaño del canvas principal
+    ctx.drawImage(
+        tempCanvas,
+        0, 0, src.cols, src.rows,
+        0, 0, canvas.width, canvas.height
+    );
+}
+
+// Función para dibujar mensaje de ayuda
+function drawHelpMessage() {
+    if (!ctx) return;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Fondo semitransparente
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(centerX - 200, centerY - 60, 400, 120);
+    
+    // Texto
+    ctx.fillStyle = '#ff0';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    ctx.fillText('🔍 PATRÓN 4×4 NO DETECTADO', centerX, centerY - 30);
+    ctx.font = '16px Arial';
+    ctx.fillText('Imprime el patrón y colócalo frente a la cámara', centerX, centerY);
+    ctx.fillText('Buena iluminación • Enfoca bien • Distancia 30-50cm', centerX, centerY + 30);
+}
         
         function createObjectPoints() {
             const points = [];
