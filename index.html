@@ -625,15 +625,45 @@
             loadSavedConfig();
         });
         
+        // ============================================
+        // DEFINIR FUNCIONES GLOBALES PRIMERO
+        // ============================================
+        
+        // Esta función DEBE estar definida ANTES de cargar OpenCV
         function onOpenCvReady() {
-            cv = window.cv;
-            elements.loadingStatus.textContent = 'OpenCV.js cargado ✅';
+            console.log('✅ OpenCV.js está listo');
             
-            // Crear buffers de audio
-            createAudioBuffers();
-            
-            // Mostrar botón de inicio
-            elements.startButton.style.display = 'block';
+            // Aquí puedes agregar lógica de inicialización si necesitas
+            if (window.cv) {
+                console.log('OpenCV version:', window.cv.version);
+                
+                // Mostrar botón de inicio si existe
+                const startButton = document.getElementById('startButton');
+                if (startButton) {
+                    startButton.style.display = 'block';
+                }
+                
+                // Actualizar estado de carga
+                const loadingStatus = document.getElementById('loadingStatus');
+                if (loadingStatus) {
+                    loadingStatus.textContent = 'OpenCV.js cargado ✅';
+                }
+            } else {
+                console.error('❌ OpenCV no se cargó correctamente');
+            }
+        }
+        
+        // También definir otras funciones globales que OpenCV pueda necesitar
+        window.onOpenCvReady = onOpenCvReady;
+        
+        // Función para manejar errores de carga de OpenCV
+        function onOpenCvError() {
+            console.error('❌ Error cargando OpenCV.js');
+            const loadingStatus = document.getElementById('loadingStatus');
+            if (loadingStatus) {
+                loadingStatus.textContent = 'Error cargando OpenCV. Recarga la página.';
+                loadingStatus.style.color = '#f00';
+            }
         }
         
         // ============================================
@@ -1562,6 +1592,11 @@
                 addEventLog('⏸️ Aplicación en segundo plano, soldadura pausada');
             }
         });
+    </script>
+    <script async 
+            src="https://docs.opencv.org/3.4.0/opencv.js" 
+            onload="onOpenCvReady()"
+            onerror="onOpenCvError()">
     </script>
 </body>
 </html>
