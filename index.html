@@ -6,24 +6,22 @@
     <meta name="theme-color" content="#16213e">
     <title>Simulador de Soldadura AR</title>
     
-    <!-- Manifest PWA (simplificado) -->
+    <!-- Manifest PWA -->
     <link rel="manifest" href="manifest.json">
     
     <!-- OpenCV.js -->
-    <script async src="https://docs.opencv.org/3.4.0/opencv.js"></script>
+    <script async src="https://docs.opencv.org/3.4.0/opencv.js" onload="onOpenCVReady()"></script>
     
     <style>
-        /* RESET Y ESTILOS BASE */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #000;
             color: white;
             overflow: hidden;
@@ -39,13 +37,12 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #0a1929 0%, #1a2b3c 100%);
+            background: #0a1929;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            transition: opacity 0.5s;
         }
 
         .spinner {
@@ -54,7 +51,7 @@
             border: 5px solid rgba(0, 170, 255, 0.3);
             border-radius: 50%;
             border-top-color: #0af;
-            animation: spin 1s ease-in-out infinite;
+            animation: spin 1s linear infinite;
             margin-bottom: 20px;
         }
 
@@ -86,13 +83,7 @@
             cursor: pointer;
             z-index: 1001;
             box-shadow: 0 10px 30px rgba(0, 255, 200, 0.4);
-            transition: all 0.3s;
             display: none;
-        }
-
-        #startButton:hover {
-            transform: translate(-50%, -50%) scale(1.05);
-            box-shadow: 0 15px 40px rgba(0, 255, 200, 0.6);
         }
 
         /* CONTENEDOR PRINCIPAL */
@@ -129,7 +120,7 @@
             left: 10px;
             right: 10px;
             z-index: 2;
-            background: rgba(0, 20, 40, 0.85);
+            background: rgba(0, 20, 40, 0.9);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 15px;
@@ -165,6 +156,14 @@
         .good { color: #0f0 !important; }
         .warning { color: #ff0 !important; }
         .error { color: #f00 !important; }
+
+        #markerStatus {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ff0;
+            font-weight: bold;
+        }
 
         /* INDICADOR DE ÁNGULO */
         #angleIndicator {
@@ -216,17 +215,11 @@
             z-index: 2;
             box-shadow: 0 10px 30px rgba(255, 80, 0, 0.4);
             border: 3px solid rgba(255, 200, 0, 0.5);
-            transition: all 0.2s;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             gap: 5px;
-        }
-
-        #weldButton:active {
-            background: linear-gradient(135deg, #f00, #f60);
-            transform: translateX(-50%) scale(0.98);
         }
 
         #weldButton.active {
@@ -257,7 +250,7 @@
             transition: width 0.3s;
         }
 
-        /* MODAL DE CONFIRMACIÓN DE DESCARGA */
+        /* MODAL DE DESCARGA */
         .modal {
             display: none;
             position: fixed;
@@ -273,7 +266,7 @@
         }
 
         .modal-content {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            background: #1a1a2e;
             width: 90%;
             max-width: 400px;
             padding: 25px;
@@ -300,31 +293,16 @@
             border-radius: 10px;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s;
         }
 
         .modal-btn.confirm {
-            background: linear-gradient(135deg, #0a6, #0fc);
+            background: #0a6;
             color: white;
         }
 
         .modal-btn.cancel {
-            background: linear-gradient(135deg, #f06, #f40);
+            background: #f40;
             color: white;
-        }
-
-        .modal-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-
-        /* ESTADO DEL MARCADOR */
-        #markerStatus {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 14px;
-            color: #ff0;
-            font-weight: bold;
         }
 
         /* LOG DE EVENTOS */
@@ -350,7 +328,6 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        /* RESPONSIVE */
         @media (max-width: 768px) {
             .metric-value { font-size: 16px; }
             #angleIndicator { 
@@ -364,21 +341,6 @@
                 font-size: 16px; 
             }
         }
-
-        @media (max-width: 480px) {
-            .metric-value { font-size: 14px; }
-            #angleIndicator { 
-                width: 60px; 
-                height: 60px;
-                top: 140px;
-                right: 10px;
-            }
-            .angle-display { font-size: 16px; }
-            .angle-label { font-size: 10px; }
-            .modal-actions {
-                flex-direction: column;
-            }
-        }
     </style>
 </head>
 <body>
@@ -386,7 +348,7 @@
     <div id="loadingScreen">
         <div class="spinner"></div>
         <h2>Simulador de Soldadura AR</h2>
-        <p id="loadingStatus">Cargando librerías...</p>
+        <p id="loadingStatus">Cargando OpenCV.js...</p>
     </div>
 
     <!-- BOTÓN DE INICIO -->
@@ -422,10 +384,6 @@
                     <div class="metric-value" id="stabilityScore">--%</div>
                 </div>
                 <div class="metric-item">
-                    <div class="metric-label">Rectitud</div>
-                    <div class="metric-value" id="straightnessScore">--%</div>
-                </div>
-                <div class="metric-item">
                     <div class="metric-label">Tiempo</div>
                     <div class="metric-value" id="sessionTimer">00:00</div>
                 </div>
@@ -450,7 +408,7 @@
         </button>
     </div>
 
-    <!-- MODAL DE CONFIRMACIÓN DE DESCARGA -->
+    <!-- MODAL DE DESCARGA -->
     <div id="downloadModal" class="modal">
         <div class="modal-content">
             <h2>📊 ¿Descargar resultados?</h2>
@@ -462,20 +420,28 @@
         </div>
     </div>
 
-    <!-- SCRIPTS -->
     <script>
         // ============================================
-        // CONFIGURACIÓN GLOBAL
+        // CONFIGURACIÓN
         // ============================================
         const CONFIG = {
-            PATTERN_SIZE: { rows: 4, cols: 4 },
-            SQUARE_SIZE: 0.25, // 250mm en metros
+            // PATRÓN 4x4 (3x3 esquinas internas)
+            PATTERN_SIZE: { rows: 3, cols: 3 }, // Esquinas internas del patrón 4x4
+            SQUARE_SIZE: 0.1, // 100mm = 0.1 metros (ajusta según tu patrón impreso)
+            
+            // Rangos óptimos
             OPTIMAL_ANGLE: { min: 5, max: 15 },
-            OPTIMAL_DISTANCE: 0.1, // 10cm
-            PROCESS_INTERVAL: 100
+            OPTIMAL_DISTANCE: { min: 0.08, max: 0.12 }, // 8-12 cm
+            
+            // Parámetros de procesamiento
+            PROCESS_INTERVAL: 100, // ms
+            HISTORY_SIZE: 30,
+            
+            // Audio
+            AUDIO_VOLUME: 0.5
         };
 
-        // Variables de estado
+        // Variables globales
         let cv = null;
         let canvas = null;
         let ctx = null;
@@ -483,29 +449,51 @@
         let isWelding = false;
         let cameraStream = null;
         
-        // Estado actual (valores de prueba para verificar UI)
-        let currentAngle = 10.5;
-        let currentDistance = 0.12;
-        let currentSpeed = 0.3;
-        let stabilityScore = 85;
-        let straightnessScore = 78;
+        // Historial para cálculos
+        let poseHistory = [];
+        let angleHistory = [];
+        let distanceHistory = [];
+        
+        // Estado actual (MEDICIONES REALES)
+        let currentAngle = 0;
+        let currentDistance = 0;
+        let currentSpeed = 0;
+        let angularSpeed = 0;
+        let stabilityScore = 100;
+        let lastDetectionTime = 0;
         
         // Evaluación
         let evaluationSession = {
             active: false,
             startTime: null,
             dataPoints: [],
-            weldDuration: 0
+            weldDuration: 0,
+            lastRecordTime: 0
         };
 
-        // Elementos del DOM
+        // Referencias a elementos DOM
         const elements = {};
 
         // ============================================
         // INICIALIZACIÓN
         // ============================================
         document.addEventListener('DOMContentLoaded', () => {
-            // Obtener referencias a elementos
+            // Obtener referencias
+            initElements();
+            
+            // Configurar eventos
+            elements.startButton.addEventListener('click', initApp);
+            elements.weldButton.addEventListener('mousedown', startWelding);
+            elements.weldButton.addEventListener('touchstart', startWelding);
+            elements.weldButton.addEventListener('mouseup', stopWelding);
+            elements.weldButton.addEventListener('touchend', stopWelding);
+            elements.confirmDownload.addEventListener('click', confirmDownload);
+            elements.cancelDownload.addEventListener('click', cancelDownload);
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+        });
+
+        function initElements() {
             elements.loadingScreen = document.getElementById('loadingScreen');
             elements.loadingStatus = document.getElementById('loadingStatus');
             elements.startButton = document.getElementById('startButton');
@@ -516,7 +504,6 @@
             elements.currentDistance = document.getElementById('currentDistance');
             elements.currentSpeed = document.getElementById('currentSpeed');
             elements.stabilityScore = document.getElementById('stabilityScore');
-            elements.straightnessScore = document.getElementById('straightnessScore');
             elements.sessionTimer = document.getElementById('sessionTimer');
             elements.angleValue = document.getElementById('angleValue');
             elements.angleIndicator = document.getElementById('angleIndicator');
@@ -527,47 +514,24 @@
             elements.downloadModal = document.getElementById('downloadModal');
             elements.confirmDownload = document.getElementById('confirmDownload');
             elements.cancelDownload = document.getElementById('cancelDownload');
-
-            // Event listeners
-            elements.startButton.addEventListener('click', initApp);
-            elements.weldButton.addEventListener('mousedown', startWelding);
-            elements.weldButton.addEventListener('touchstart', startWelding);
-            elements.weldButton.addEventListener('mouseup', stopWelding);
-            elements.weldButton.addEventListener('touchend', stopWelding);
-            elements.confirmDownload.addEventListener('click', confirmDownload);
-            elements.cancelDownload.addEventListener('click', cancelDownload);
-            document.addEventListener('keydown', handleKeyDown);
-            document.addEventListener('keyup', handleKeyUp);
-
-            // Verificar si OpenCV ya está cargado
-            checkOpenCV();
-        });
-
-        // ============================================
-        // MANEJO DE OPENCV
-        // ============================================
-        function checkOpenCV() {
-            if (window.cv) {
-                cv = window.cv;
-                onOpenCVReady();
-            } else {
-                // Esperar a que OpenCV cargue
-                setTimeout(checkOpenCV, 100);
-            }
         }
 
+        // ============================================
+        // OPENCV
+        // ============================================
         function onOpenCVReady() {
             console.log('✅ OpenCV.js cargado');
+            cv = window.cv;
             elements.loadingStatus.textContent = 'OpenCV.js listo ✅';
             elements.startButton.style.display = 'block';
         }
 
         // ============================================
-        // INICIALIZAR APLICACIÓN
+        // INICIAR APLICACIÓN
         // ============================================
         async function initApp() {
             elements.startButton.style.display = 'none';
-            elements.loadingStatus.textContent = 'Solicitando acceso a cámara...';
+            elements.loadingStatus.textContent = 'Solicitando cámara...';
             
             try {
                 // Solicitar cámara trasera
@@ -575,127 +539,382 @@
                     video: {
                         facingMode: 'environment',
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
                     }
                 });
                 
                 elements.videoStream.srcObject = cameraStream;
                 
                 // Esperar a que el video esté listo
-                elements.videoStream.onloadedmetadata = () => {
-                    console.log('✅ Video listo');
-                    
-                    // Configurar canvas
-                    canvas = elements.arCanvas;
-                    ctx = canvas.getContext('2d');
-                    
-                    const videoWidth = elements.videoStream.videoWidth;
-                    const videoHeight = elements.videoStream.videoHeight;
-                    
-                    canvas.width = videoWidth;
-                    canvas.height = videoHeight;
-                    
-                    console.log(`Resolución: ${videoWidth}x${videoHeight}`);
-                    
-                    // Mostrar interfaz principal
-                    elements.appContainer.style.display = 'block';
-                    elements.loadingScreen.style.opacity = '0';
-                    
-                    setTimeout(() => {
-                        elements.loadingScreen.style.display = 'none';
-                        startProcessing();
-                    }, 500);
-                    
-                    addEventLog('✅ Cámara configurada');
-                };
+                await new Promise(resolve => {
+                    elements.videoStream.onloadedmetadata = () => {
+                        console.log('✅ Video listo');
+                        resolve();
+                    };
+                });
+                
+                // Configurar canvas
+                canvas = elements.arCanvas;
+                ctx = canvas.getContext('2d');
+                const videoWidth = elements.videoStream.videoWidth;
+                const videoHeight = elements.videoStream.videoHeight;
+                
+                canvas.width = videoWidth;
+                canvas.height = videoHeight;
+                
+                console.log(`Resolución: ${videoWidth}x${videoHeight}`);
+                
+                // Mostrar interfaz
+                elements.appContainer.style.display = 'block';
+                elements.loadingScreen.style.display = 'none';
+                
+                // Iniciar procesamiento
+                startProcessing();
+                addEventLog('✅ Sistema iniciado');
                 
             } catch (error) {
                 elements.loadingStatus.textContent = `Error: ${error.message}`;
                 elements.startButton.style.display = 'block';
-                addEventLog(`❌ Error de cámara: ${error.message}`);
+                addEventLog(`❌ Error: ${error.message}`);
             }
         }
 
         // ============================================
-        // PROCESAMIENTO SIMPLIFICADO (para evitar errores)
+        // PROCESAMIENTO REAL CON OPENCV
         // ============================================
         function startProcessing() {
-            if (isProcessing) return;
+            if (isProcessing || !cv) return;
             
             isProcessing = true;
-            console.log('🔄 Iniciando procesamiento...');
+            console.log('🔄 Iniciando procesamiento de visión...');
             
-            // Iniciar bucle de procesamiento
-            processFrame();
+            // Bucle principal de procesamiento
+            function processLoop() {
+                if (!isProcessing) return;
+                
+                try {
+                    processFrame();
+                } catch (error) {
+                    console.error('Error en procesamiento:', error);
+                }
+                
+                // Continuar bucle
+                setTimeout(processLoop, CONFIG.PROCESS_INTERVAL);
+            }
+            
+            processLoop();
         }
 
         function processFrame() {
-            if (!isProcessing) return;
+            if (!ctx || !elements.videoStream.readyState) return;
             
-            try {
-                // Verificar que el video tenga dimensiones
-                if (!elements.videoStream.videoWidth || !elements.videoStream.videoHeight) {
-                    setTimeout(processFrame, 100);
-                    return;
+            // Obtener dimensiones del video
+            const videoWidth = elements.videoStream.videoWidth;
+            const videoHeight = elements.videoStream.videoHeight;
+            
+            if (!videoWidth || !videoHeight) return;
+            
+            // Crear matriz OpenCV desde el video
+            const src = new cv.Mat(videoHeight, videoWidth, cv.CV_8UC4);
+            const cap = new cv.VideoCapture(elements.videoStream);
+            cap.read(src);
+            
+            // Convertir a escala de grises
+            const gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            
+            // Buscar patrón de ajedrez
+            const patternSize = new cv.Size(CONFIG.PATTERN_SIZE.cols, CONFIG.PATTERN_SIZE.rows);
+            const corners = new cv.Mat();
+            
+            // Usar flags para mejor detección
+            const flags = cv.CALIB_CB_ADAPTIVE_THRESH + 
+                         cv.CALIB_CB_NORMALIZE_IMAGE + 
+                         cv.CALIB_CB_FAST_CHECK;
+            
+            const patternFound = cv.findChessboardCorners(gray, patternSize, corners, flags);
+            
+            if (patternFound && corners.rows > 0) {
+                // Refinar detección de esquinas
+                const termCriteria = new cv.TermCriteria(
+                    cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_COUNT, 
+                    30, 
+                    0.001
+                );
+                
+                const winSize = new cv.Size(11, 11);
+                const zeroZone = new cv.Size(-1, -1);
+                
+                cv.cornerSubPix(gray, corners, winSize, zeroZone, termCriteria);
+                
+                // CALCULAR POSE REAL (solvePnP)
+                const objectPoints = createObjectPoints();
+                const cameraMatrix = estimateCameraMatrix(videoWidth, videoHeight);
+                const distCoeffs = new cv.Mat.zeros(5, 1, cv.CV_64F);
+                
+                const rvec = new cv.Mat();
+                const tvec = new cv.Mat();
+                
+                // Calcular posición y orientación
+                cv.solvePnP(objectPoints, corners, cameraMatrix, distCoeffs, rvec, tvec, false, cv.SOLVEPNP_ITERATIVE);
+                
+                // Extraer ángulos de Euler
+                const rotationMatrix = new cv.Mat();
+                cv.Rodrigues(rvec, rotationMatrix);
+                
+                // Convertir ángulos de rotación a grados
+                const eulerAngles = rotationMatrixToEuler(rotationMatrix);
+                currentAngle = Math.abs(eulerAngles.x * (180 / Math.PI));
+                
+                // Calcular distancia (norma del vector de traslación)
+                const tx = tvec.data64F[0];
+                const ty = tvec.data64F[1];
+                const tz = tvec.data64F[2];
+                currentDistance = Math.sqrt(tx*tx + ty*ty + tz*tz);
+                
+                // Actualizar historial para cálculos de velocidad
+                updateHistory(currentAngle, currentDistance);
+                
+                // Calcular velocidad
+                calculateVelocities();
+                
+                // Actualizar UI
+                updateMetricsDisplay();
+                
+                // Dibujar overlay
+                drawDetectionOverlay(src, corners, patternSize);
+                
+                // Dibujar guías
+                drawVisualGuides();
+                
+                // Actualizar estado
+                elements.markerStatus.textContent = '✅ Patrón detectado';
+                elements.markerStatus.style.color = '#0f0';
+                lastDetectionTime = Date.now();
+                
+                // Limpiar matrices OpenCV
+                rotationMatrix.delete();
+                rvec.delete();
+                tvec.delete();
+                cameraMatrix.delete();
+                distCoeffs.delete();
+                
+            } else {
+                // Patrón no detectado
+                elements.markerStatus.textContent = '🔍 Buscando patrón 4×4...';
+                elements.markerStatus.style.color = '#ff0';
+                
+                // Dibujar solo el video
+                ctx.drawImage(elements.videoStream, 0, 0, canvas.width, canvas.height);
+                
+                // Mostrar mensaje de ayuda
+                if (Date.now() - lastDetectionTime > 3000) {
+                    drawHelpMessage();
                 }
-                
-                // Dibujar video en canvas (solo para visualización)
-                if (ctx) {
-                    ctx.drawImage(
-                        elements.videoStream,
-                        0, 0,
-                        canvas.width, canvas.height
-                    );
-                    
-                    // Dibujar guías visuales
-                    drawVisualGuides();
+            }
+            
+            // Limpiar matrices
+            src.delete();
+            gray.delete();
+            corners.delete();
+        }
+
+        // ============================================
+        // FUNCIONES DE CÁLCULO
+        // ============================================
+        function createObjectPoints() {
+            const points = [];
+            const squareSize = CONFIG.SQUARE_SIZE;
+            
+            // Puntos 3D del patrón (en metros)
+            for (let i = 0; i < CONFIG.PATTERN_SIZE.rows; i++) {
+                for (let j = 0; j < CONFIG.PATTERN_SIZE.cols; j++) {
+                    points.push(new cv.Point3(j * squareSize, i * squareSize, 0));
                 }
+            }
+            
+            return cv.matFromArray(points.length, 3, cv.CV_64F, 
+                points.flatMap(p => [p.x, p.y, p.z]));
+        }
+
+        function estimateCameraMatrix(width, height) {
+            const fx = 800; // Focal length X (aproximado)
+            const fy = 800; // Focal length Y
+            const cx = width / 2; // Centro óptico X
+            const cy = height / 2; // Centro óptico Y
+            
+            return cv.matFromArray(3, 3, cv.CV_64F, [
+                fx, 0, cx,
+                0, fy, cy,
+                0, 0, 1
+            ]);
+        }
+
+        function rotationMatrixToEuler(R) {
+            // Extraer ángulos de Euler de la matriz de rotación
+            const sy = Math.sqrt(R.data64F[0] * R.data64F[0] + R.data64F[3] * R.data64F[3]);
+            
+            let x, y, z;
+            
+            if (sy > 1e-6) {
+                x = Math.atan2(R.data64F[7], R.data64F[8]);
+                y = Math.atan2(-R.data64F[6], sy);
+                z = Math.atan2(R.data64F[3], R.data64F[0]);
+            } else {
+                x = Math.atan2(-R.data64F[5], R.data64F[4]);
+                y = Math.atan2(-R.data64F[6], sy);
+                z = 0;
+            }
+            
+            return { x, y, z };
+        }
+
+        function updateHistory(angle, distance) {
+            const now = Date.now();
+            
+            // Guardar en historial
+            angleHistory.push({ angle, timestamp: now });
+            distanceHistory.push({ distance, timestamp: now });
+            
+            // Limitar tamaño del historial
+            if (angleHistory.length > CONFIG.HISTORY_SIZE) {
+                angleHistory.shift();
+                distanceHistory.shift();
+            }
+            
+            // Calcular estabilidad (desviación estándar)
+            if (angleHistory.length > 5) {
+                const angles = angleHistory.map(h => h.angle);
+                const mean = angles.reduce((a, b) => a + b) / angles.length;
+                const variance = angles.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / angles.length;
+                const stdDev = Math.sqrt(variance);
                 
-                // Actualizar métricas de prueba (simuladas)
-                updateTestMetrics();
-                
-                // Continuar procesamiento
-                requestAnimationFrame(processFrame);
-                
-            } catch (error) {
-                console.error('Error en procesamiento:', error);
-                setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
+                // Convertir a puntaje 0-100 (menos desviación = más estable)
+                stabilityScore = Math.max(0, 100 - (stdDev * 20));
             }
         }
 
-        // ============================================
-        // MÉTRICAS DE PRUEBA (para verificar UI)
-        // ============================================
-        function updateTestMetrics() {
-            // Generar valores de prueba ligeramente variables
-            currentAngle = 10 + Math.sin(Date.now() / 1000) * 2;
-            currentDistance = 0.1 + Math.random() * 0.05;
-            currentSpeed = 0.2 + Math.random() * 0.3;
-            stabilityScore = 80 + Math.random() * 20;
-            straightnessScore = 75 + Math.random() * 20;
+        function calculateVelocities() {
+            if (angleHistory.length < 2 || distanceHistory.length < 2) return;
             
-            // Actualizar UI
-            updateMetricsDisplay();
+            const lastAngle = angleHistory[angleHistory.length - 2];
+            const currentAngleData = angleHistory[angleHistory.length - 1];
+            const lastDistance = distanceHistory[distanceHistory.length - 2];
+            const currentDistanceData = distanceHistory[distanceHistory.length - 1];
+            
+            const dt = (currentAngleData.timestamp - lastAngle.timestamp) / 1000;
+            if (dt === 0) return;
+            
+            // Velocidad angular (grados/segundo)
+            angularSpeed = Math.abs(currentAngleData.angle - lastAngle.angle) / dt;
+            
+            // Velocidad lineal (m/segundo)
+            const linearSpeed = Math.abs(currentDistanceData.distance - lastDistance.distance) / dt;
+            currentSpeed = linearSpeed;
         }
 
+        // ============================================
+        // DIBUJADO
+        // ============================================
+        function drawDetectionOverlay(src, corners, patternSize) {
+            // Dibujar esquinas detectadas
+            cv.drawChessboardCorners(src, patternSize, corners, true);
+            
+            // Convertir a RGBA para canvas
+            const rgba = new cv.Mat();
+            cv.cvtColor(src, rgba, cv.COLOR_RGB2RGBA);
+            
+            // Mostrar en canvas
+            ctx.putImageData(
+                new ImageData(
+                    new Uint8ClampedArray(rgba.data),
+                    rgba.cols,
+                    rgba.rows
+                ),
+                0, 0
+            );
+            
+            rgba.delete();
+        }
+
+        function drawVisualGuides() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Dibujar línea de ángulo actual
+            const angleRad = (currentAngle - 90) * Math.PI / 180;
+            const length = 100;
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + Math.cos(angleRad) * length,
+                centerY + Math.sin(angleRad) * length
+            );
+            
+            // Color según rango
+            if (currentAngle >= CONFIG.OPTIMAL_ANGLE.min && 
+                currentAngle <= CONFIG.OPTIMAL_ANGLE.max) {
+                ctx.strokeStyle = '#0f0';
+            } else if (currentAngle < CONFIG.OPTIMAL_ANGLE.min) {
+                ctx.strokeStyle = '#ff0';
+            } else {
+                ctx.strokeStyle = '#f00';
+            }
+            
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            // Dibujar círculo de distancia
+            const circleRadius = Math.min(200, currentDistance * 1000); // Escala para visualización
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, circleRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 200, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawHelpMessage() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(centerX - 200, centerY - 60, 400, 120);
+            
+            ctx.fillStyle = '#ff0';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ctx.fillText('🔍 IMPRIME Y USA EL PATRÓN 4×4', centerX, centerY - 30);
+            ctx.font = '16px Arial';
+            ctx.fillText('1. Imprime el patrón en papel A4', centerX, centerY);
+            ctx.fillText('2. Colócalo frente a la cámara (30-50 cm)', centerX, centerY + 30);
+        }
+
+        // ============================================
+        // ACTUALIZACIÓN DE UI
+        // ============================================
         function updateMetricsDisplay() {
-            // Actualizar valores en pantalla
+            // Actualizar valores (MEDICIONES REALES)
             elements.currentAngle.textContent = `${currentAngle.toFixed(1)}°`;
             elements.currentDistance.textContent = `${(currentDistance * 100).toFixed(1)} cm`;
             elements.currentSpeed.textContent = `${(currentSpeed * 100).toFixed(1)} cm/s`;
             elements.stabilityScore.textContent = `${stabilityScore.toFixed(0)}%`;
-            elements.straightnessScore.textContent = `${straightnessScore.toFixed(0)}%`;
             elements.angleValue.textContent = `${currentAngle.toFixed(1)}°`;
             
-            // Actualizar colores según calidad
-            updateMetricColor(elements.currentAngle, currentAngle, CONFIG.OPTIMAL_ANGLE.min, CONFIG.OPTIMAL_ANGLE.max);
+            // Colores según calidad
+            updateMetricColor(elements.currentAngle, currentAngle, 
+                            CONFIG.OPTIMAL_ANGLE.min, CONFIG.OPTIMAL_ANGLE.max);
+            updateMetricColor(elements.currentDistance, currentDistance, 
+                            CONFIG.OPTIMAL_DISTANCE.min, CONFIG.OPTIMAL_DISTANCE.max);
             updateMetricColor(elements.stabilityScore, stabilityScore, 70, 100);
-            updateMetricColor(elements.straightnessScore, straightnessScore, 70, 100);
             
             // Actualizar indicador de ángulo
             updateAngleIndicator();
             
-            // Actualizar timer si hay evaluación activa
+            // Actualizar timer
             if (evaluationSession.active) {
                 updateSessionTimer();
             }
@@ -715,12 +934,15 @@
 
         function updateAngleIndicator() {
             const indicator = elements.angleIndicator;
-            if (currentAngle >= CONFIG.OPTIMAL_ANGLE.min && currentAngle <= CONFIG.OPTIMAL_ANGLE.max) {
-                indicator.style.borderColor = 'rgba(0, 255, 0, 0.7)';
+            if (currentAngle >= CONFIG.OPTIMAL_ANGLE.min && 
+                currentAngle <= CONFIG.OPTIMAL_ANGLE.max) {
+                indicator.style.borderColor = '#0f0';
             } else if (currentAngle < CONFIG.OPTIMAL_ANGLE.min) {
-                indicator.style.borderColor = 'rgba(255, 255, 0, 0.7)';
+                indicator.style.borderColor = '#ff0';
+                indicator.style.animation = 'pulse 0.5s infinite alternate';
             } else {
-                indicator.style.borderColor = 'rgba(255, 0, 0, 0.7)';
+                indicator.style.borderColor = '#f00';
+                indicator.style.animation = 'pulse 0.3s infinite alternate';
             }
         }
 
@@ -736,56 +958,6 @@
         }
 
         // ============================================
-        // DIBUJADO DE GUIAS VISUALES
-        // ============================================
-        function drawVisualGuides() {
-            if (!ctx) return;
-            
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            
-            // Dibujar retícula central
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(centerX - 30, centerY);
-            ctx.lineTo(centerX + 30, centerY);
-            ctx.moveTo(centerX, centerY - 30);
-            ctx.lineTo(centerX, centerY + 30);
-            ctx.stroke();
-            
-            // Dibujar círculo de objetivo
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 50, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(0, 200, 255, 0.5)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            
-            // Dibujar línea de ángulo (simulada)
-            const angleRad = (currentAngle - 90) * Math.PI / 180;
-            const length = 80;
-            
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.lineTo(
-                centerX + Math.cos(angleRad) * length,
-                centerY + Math.sin(angleRad) * length
-            );
-            
-            // Color según rango
-            if (currentAngle >= CONFIG.OPTIMAL_ANGLE.min && currentAngle <= CONFIG.OPTIMAL_ANGLE.max) {
-                ctx.strokeStyle = '#0f0';
-            } else if (currentAngle < CONFIG.OPTIMAL_ANGLE.min) {
-                ctx.strokeStyle = '#ff0';
-            } else {
-                ctx.strokeStyle = '#f00';
-            }
-            
-            ctx.lineWidth = 3;
-            ctx.stroke();
-        }
-
-        // ============================================
         // EVALUACIÓN DE SOLDADURA
         // ============================================
         function startWelding() {
@@ -794,28 +966,22 @@
             isWelding = true;
             elements.weldButton.classList.add('active');
             
-            // Iniciar evaluación si no está activa
+            // Iniciar evaluación
             if (!evaluationSession.active) {
                 evaluationSession = {
                     active: true,
                     startTime: Date.now(),
                     dataPoints: [],
-                    weldDuration: 0
+                    weldDuration: 0,
+                    lastRecordTime: Date.now()
                 };
                 addEventLog('▶️ Inicio de evaluación');
             }
             
             addEventLog('🔥 Soldadura iniciada');
             
-            // Registrar datos iniciales
-            evaluationSession.dataPoints.push({
-                timestamp: 0,
-                angle: currentAngle,
-                distance: currentDistance,
-                speed: currentSpeed,
-                stability: stabilityScore,
-                straightness: straightnessScore
-            });
+            // Registrar primer punto
+            recordDataPoint();
             
             // Iniciar progreso
             updateWeldProgress();
@@ -827,12 +993,11 @@
             isWelding = false;
             elements.weldButton.classList.remove('active');
             
-            // Actualizar duración
             if (evaluationSession.active) {
                 evaluationSession.weldDuration = Date.now() - evaluationSession.startTime;
                 addEventLog('⏹️ Soldadura detenida');
                 
-                // Mostrar modal de confirmación en lugar de descarga automática
+                // Mostrar modal de confirmación
                 setTimeout(() => {
                     showDownloadModal();
                 }, 500);
@@ -850,24 +1015,33 @@
             
             elements.weldProgress.style.width = `${progress}%`;
             
-            // Registrar datos periódicamente
-            if (evaluationSession.active && elapsed % 1000 < 50) { // ~1 vez por segundo
-                evaluationSession.dataPoints.push({
-                    timestamp: elapsed,
-                    angle: currentAngle,
-                    distance: currentDistance,
-                    speed: currentSpeed,
-                    stability: stabilityScore,
-                    straightness: straightnessScore
-                });
+            // Registrar datos cada 100ms aproximadamente
+            if (Date.now() - evaluationSession.lastRecordTime > 100) {
+                recordDataPoint();
+                evaluationSession.lastRecordTime = Date.now();
             }
             
-            // Continuar progreso
+            // Continuar bucle
             requestAnimationFrame(updateWeldProgress);
         }
 
+        function recordDataPoint() {
+            if (!evaluationSession.active) return;
+            
+            const elapsed = Date.now() - evaluationSession.startTime;
+            
+            evaluationSession.dataPoints.push({
+                timestamp: elapsed,
+                angle: currentAngle,
+                distance: currentDistance,
+                speed: currentSpeed,
+                stability: stabilityScore,
+                angularSpeed: angularSpeed
+            });
+        }
+
         // ============================================
-        // MODAL DE DESCARGA (ACEPTAR/RECHAZAR)
+        // MODAL DE DESCARGA
         // ============================================
         function showDownloadModal() {
             elements.downloadModal.style.display = 'flex';
@@ -884,10 +1058,9 @@
 
         function cancelDownload() {
             hideDownloadModal();
-            addEventLog('❌ Descarga cancelada por el usuario');
+            addEventLog('❌ Descarga cancelada');
             
-            // Preguntar si iniciar nueva sesión
-            if (confirm('¿Deseas iniciar una nueva sesión de evaluación?')) {
+            if (confirm('¿Iniciar nueva sesión?')) {
                 evaluationSession.active = false;
                 elements.sessionTimer.textContent = '00:00';
                 addEventLog('🔄 Nueva sesión lista');
@@ -895,33 +1068,33 @@
         }
 
         // ============================================
-        // EXPORTACIÓN DE RESULTADOS
+        // EXPORTACIÓN
         // ============================================
         function exportResults() {
             if (!evaluationSession.dataPoints.length) {
-                addEventLog('⚠️ No hay datos para exportar');
+                alert('No hay datos para exportar');
                 return;
             }
             
             // Crear CSV
-            const headers = ['Timestamp(ms)', 'Angle(deg)', 'Distance(m)', 'Speed(m/s)', 'Stability(%)', 'Straightness(%)'];
+            const headers = ['Timestamp(ms)', 'Angle(deg)', 'Distance(cm)', 'Speed(cm/s)', 'Stability(%)', 'AngularSpeed(deg/s)'];
             const csvRows = [headers.join(',')];
             
             evaluationSession.dataPoints.forEach(point => {
                 const row = [
                     point.timestamp,
                     point.angle.toFixed(2),
-                    point.distance.toFixed(3),
-                    point.speed.toFixed(3),
+                    (point.distance * 100).toFixed(2),
+                    (point.speed * 100).toFixed(2),
                     point.stability.toFixed(1),
-                    point.straightness.toFixed(1)
+                    point.angularSpeed.toFixed(1)
                 ];
                 csvRows.push(row.join(','));
             });
             
-            // Agregar resumen
-            const avgAngle = evaluationSession.dataPoints.reduce((sum, p) => sum + p.angle, 0) / evaluationSession.dataPoints.length;
-            const avgDistance = evaluationSession.dataPoints.reduce((sum, p) => sum + p.distance, 0) / evaluationSession.dataPoints.length;
+            // Resumen
+            const avgAngle = evaluationSession.dataPoints.reduce((s, p) => s + p.angle, 0) / evaluationSession.dataPoints.length;
+            const avgDistance = evaluationSession.dataPoints.reduce((s, p) => s + p.distance, 0) / evaluationSession.dataPoints.length;
             const timeInRange = (evaluationSession.dataPoints.filter(p => 
                 p.angle >= CONFIG.OPTIMAL_ANGLE.min && p.angle <= CONFIG.OPTIMAL_ANGLE.max
             ).length / evaluationSession.dataPoints.length * 100);
@@ -935,21 +1108,19 @@
             
             const csvContent = csvRows.join('\n');
             
-            // Crear y descargar archivo
+            // Descargar
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             
             a.href = url;
-            a.download = `soldadura_evaluacion_${Date.now()}.csv`;
+            a.download = `soldadura_${new Date().toISOString().slice(0,19).replace(/[:]/g,'-')}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
             addEventLog('📥 Resultados descargados');
-            
-            // Resetear evaluación
             evaluationSession.active = false;
             elements.sessionTimer.textContent = '00:00';
         }
@@ -966,7 +1137,6 @@
             log.appendChild(entry);
             log.scrollTop = log.scrollHeight;
             
-            // Limitar tamaño del log
             if (log.children.length > 10) {
                 log.removeChild(log.firstChild);
             }
@@ -986,8 +1156,12 @@
             }
         }
 
-        // Iniciar actualización periódica de métricas
-        setInterval(updateMetricsDisplay, 500);
+        // Iniciar actualización de UI
+        setInterval(() => {
+            if (isProcessing) {
+                updateMetricsDisplay();
+            }
+        }, 100);
     </script>
 </body>
 </html>
