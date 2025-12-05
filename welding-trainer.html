@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#16213e">
+    <title>Simulador de Soldadura AR</title>
+    
+    <!-- Manifest PWA -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- OpenCV.js (versión mínima) -->
+    <script async src="https://docs.opencv.org/3.4.0/opencv.js" onload="onOpenCvReady()"></script>
+    
+    <!-- AR.js y A-Frame -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
+    <style>
+        /* RESET Y ESTILOS BASE */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #000;
+            color: white;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+        }
+
+        /* PANTALLA DE CARGA */
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a1929 0%, #1a2b3c 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(0, 170, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #0af;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #loadingStatus {
+            text-align: center;
+            max-width: 80%;
+            color: #8cf;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        /* BOTÓN DE INICIO */
+        #startButton {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #0a6, #0fc);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0 10px 30px rgba(0, 255, 200, 0.4);
+            transition: all 0.3s;
+            display: none;
+        }
+
+        #startButton:hover {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 15px 40px rgba(0, 255, 200, 0.6);
+        }
+
+        /* CONTENEDOR PRINCIPAL */
+        #appContainer {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* VIDEO Y CANVAS */
+        #videoStream {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Espejo para cámara frontal */
+        }
+
+        #arCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* OVERLAY DE MÉTRICAS */
+        #metricsOverlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 2;
+            background: rgba(0, 20, 40, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            border: 2px solid rgba(0, 200, 255, 0.3);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .metric-item {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: #8cf;
+            margin-bottom: 4px;
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 8px currentColor;
+        }
+
+        .good { color: #0f0 !important; }
+        .warning { color: #ff0 !important; }
+        .error { color: #f00 !important; }
+
+        /* INDICADOR DE ÁNGULO */
+        #angleIndicator {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 100px;
+            height: 100px;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .angle-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .angle-label {
+            font-size: 12px;
+            color: #8cf;
+            margin-top: 5px;
+        }
+
+        /* BOTÓN DE SOLDADURA */
+        #weldButton {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            height: 80px;
+            background: linear-gradient(135deg, #f50, #f80);
+            border: none;
+            border-radius: 20px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 2;
+            box-shadow: 0 10px 30px rgba(255, 80, 0, 0.4);
+            border: 3px solid rgba(255, 200, 0, 0.5);
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #weldButton:active {
+            background: linear-gradient(135deg, #f00, #f60);
+            transform: translateX(-50%) scale(0.98);
+        }
+
+        #weldButton.active {
+            background: linear-gradient(135deg, #0f0, #0f8);
+            border-color: rgba(0, 255, 100, 0.7);
+            animation: weldPulse 0.5s infinite alternate;
+        }
+
+        @keyframes weldPulse {
+            from { box-shadow: 0 10px 30px rgba(0, 255, 100, 0.4); }
+            to { box-shadow: 0 10px 40px rgba(0, 255, 100, 0.7); }
+        }
+
+        .weld-text {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        /* BARRA DE PROGRESO */
+        #weldProgress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #0f0, #ff0);
+            width: 0%;
+            border-radius: 0 0 20px 20px;
+            transition: width 0.3s;
+        }
+
+        /* MODAL DE CALIBRACIÓN */
+        .calibration-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1002;
+            backdrop-filter: blur(10px);
+        }
+
+        .calibration-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            width: 90%;
+            max-width: 500px;
+            padding: 25px;
+            border-radius: 20px;
+            border: 2px solid #0af;
+            text-align: center;
+        }
+
+        .calibration-content h2 {
+            color: #0af;
+            margin-bottom: 15px;
+        }
+
+        .calibration-step {
+            background: rgba(0, 30, 60, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            text-align: left;
+        }
+
+        .calibration-param {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .calibration-param input {
+            width: 100px;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #0af;
+            background: rgba(0, 20, 40, 0.8);
+            color: white;
+            text-align: center;
+        }
+
+        /* LOG DE EVENTOS */
+        #eventLog {
+            position: absolute;
+            bottom: 120px;
+            left: 10px;
+            right: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 11px;
+            z-index: 2;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* INDICADORES VISUALES */
+        .visual-guide {
+            position: absolute;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        #targetCircle {
+            border: 3px dashed rgba(0, 255, 0, 0.5);
+            border-radius: 50%;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .metric-value { font-size: 16px; }
+            #angleIndicator { 
+                width: 80px; 
+                height: 80px; 
+                right: 10px; 
+            }
+            .angle-display { font-size: 20px; }
+            #weldButton { 
+                height: 70px; 
+                font-size: 16px; 
+            }
+        }
+
+        @media (max-width: 480px) {
+            .metric-value { font-size: 14px; }
+            #angleIndicator { 
+                width: 60px; 
+                height: 60px;
+                top: 140px;
+                right: 10px;
+            }
+            .angle-display { font-size: 16px; }
+            .angle-label { font-size: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- PANTALLA DE CARGA -->
+    <div id="loadingScreen">
+        <div class="spinner"></div>
+        <h2>Simulador de Soldadura AR</h2>
+        <p id="loadingStatus">Cargando librerías...</p>
+    </div>
+
+    <!-- BOTÓN DE INICIO -->
+    <button id="startButton">🚀 INICIAR SIMULADOR</button>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div id="appContainer">
+        <!-- STREAM DE VIDEO -->
+        <video id="videoStream" autoplay playsinline></video>
+        
+        <!-- CANVAS PARA OVERLAY AR -->
+        <canvas id="arCanvas"></canvas>
+        
+        <!-- OVERLAY DE MÉTRICAS -->
+        <div id="metricsOverlay">
+            <div class="metric-row">
+                <div class="metric-item">
+                    <div class="metric-label">Ángulo</div>
+                    <div class="metric-value" id="currentAngle">--°</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Distancia</div>
+                    <div class="metric-value" id="currentDistance">-- cm</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Vel. Traslación</div>
+                    <div class="metric-value" id="currentSpeed">-- cm/s</div>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-item">
+                    <div class="metric-label">Estabilidad</div>
+                    <div class="metric-value" id="stabilityScore">--%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Rectitud</div>
+                    <div class="metric-value" id="straightnessScore">--%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Tiempo</div>
+                    <div class="metric-value" id="sessionTimer">00:00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- INDICADOR DE ÁNGULO -->
+        <div id="angleIndicator">
+            <div class="angle-display" id="angleValue">--°</div>
+            <div class="angle-label">Ángulo actual</div>
+        </div>
+
+        <!-- LOG DE EVENTOS -->
+        <div id="eventLog"></div>
+
+        <!-- BOTÓN DE SOLDADURA -->
+        <button id="weldButton">
+            <div>🔥 MANTÉN PARA SOLDAR</div>
+            <div class="weld-text">(Usa botón de volumen si es posible)</div>
+            <div id="weldProgress"></div>
+        </button>
+    </div>
+
+    <!-- MODAL DE CALIBRACIÓN -->
+    <div id="calibrationModal" class="calibration-modal" style="display: none;">
+        <div class="calibration-content">
+            <h2>⚙️ Calibración del Patrón</h2>
+            
+            <div class="calibration-step">
+                <h3>📐 Medidas del Patrón</h3>
+                <div class="calibration-param">
+                    <span>Tamaño de cuadro (mm):</span>
+                    <input type="number" id="squareSize" value="250" min="10" max="1000">
+                </div>
+                <div class="calibration-param">
+                    <span>Filas del patrón:</span>
+                    <input type="number" id="patternRows" value="4" min="3" max="10" readonly>
+                </div>
+                <div class="calibration-param">
+                    <span>Columnas del patrón:</span>
+                    <input type="number" id="patternCols" value="4" min="3" max="10" readonly>
+                </div>
+            </div>
+
+            <div class="calibration-step">
+                <h3>🎯 Rango Óptimo</h3>
+                <div class="calibration-param">
+                    <span>Ángulo mínimo (°):</span>
+                    <input type="number" id="minAngle" value="5" min="0" max="90">
+                </div>
+                <div class="calibration-param">
+                    <span>Ángulo máximo (°):</span>
+                    <input type="number" id="maxAngle" value="15" min="0" max="90">
+                </div>
+                <div class="calibration-param">
+                    <span>Distancia ideal (cm):</span>
+                    <input type="number" id="idealDistance" value="10" min="1" max="100">
+                </div>
+            </div>
+
+            <div class="calibration-step">
+                <h3>📷 Configuración de Cámara</h3>
+                <p id="cameraInfo">Esperando acceso a cámara...</p>
+                <button id="toggleCamera" style="width:100%; padding:10px; margin:10px 0;">
+                    🔄 Cambiar Cámara
+                </button>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="saveCalibration" style="flex:1; padding:12px; background:#0a6; color:white; border:none; border-radius:8px;">
+                    💾 Guardar Calibración
+                </button>
+                <button id="autoCalibrate" style="flex:1; padding:12px; background:#08f; color:white; border:none; border-radius:8px;">
+                    🤖 Calibración Automática
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // ============================================
+        // CONFIGURACIÓN GLOBAL Y VARIABLES
+        // ============================================
+        const CONFIG = {
+            // Parámetros del patrón (AJUSTAR SEGÚN EL PATRÓN IMPRESO)
+            PATTERN_SIZE: { rows: 4, cols: 4 },
+            SQUARE_SIZE: 0.25, // en metros (250mm)
+            
+            // Rangos óptimos para soldadura
+            OPTIMAL_ANGLE: { min: 5, max: 15 }, // grados
+            OPTIMAL_DISTANCE: 0.1, // en metros (10cm)
+            WARNING_THRESHOLD: 0.2, // 20% fuera del rango
+            
+            // Parámetros de detección
+            DETECTION_THRESHOLD: 0.7,
+            MIN_DETECTION_FRAMES: 5,
+            
+            // Audio
+            AUDIO_VOLUME: 0.5,
+            BEEP_DURATION: 0.1,
+            
+            // Rendimiento
+            PROCESS_INTERVAL: 100, // ms
+            HISTORY_SIZE: 30,
+            
+            // Almacenamiento
+            STORAGE_KEY: 'welding_trainer_config'
+        };
+
+        // Variables de estado
+        let cv = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let isInitialized = false;
+        let isProcessing = false;
+        let isWelding = false;
+        let isCalibrating = false;
+        let cameraStream = null;
+        let currentCamera = 'environment';
+        
+        // Historial de poses
+        let poseHistory = [];
+        let detectionHistory = [];
+        
+        // Estado actual
+        let currentPose = null;
+        let currentAngle = 0;
+        let currentDistance = 0;
+        let currentSpeed = 0;
+        let angularSpeed = 0;
+        let stabilityScore = 0;
+        let straightnessScore = 0;
+        
+        // Evaluación
+        let evaluationSession = {
+            active: false,
+            startTime: null,
+            dataPoints: [],
+            events: [],
+            weldDuration: 0
+        };
+        
+        // Elementos del DOM
+        const elements = {};
+        
+        // Audio
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let highBeepBuffer = null;
+        let lowBeepBuffer = null;
+        let startBeepBuffer = null;
+        let endBeepBuffer = null;
+        let weldSoundBuffer = null;
+        let weldSoundSource = null;
+        
+        // ============================================
+        // INICIALIZACIÓN
+        // ============================================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Referencias a elementos DOM
+            elements.loadingScreen = document.getElementById('loadingScreen');
+            elements.loadingStatus = document.getElementById('loadingStatus');
+            elements.startButton = document.getElementById('startButton');
+            elements.appContainer = document.getElementById('appContainer');
+            elements.videoStream = document.getElementById('videoStream');
+            elements.arCanvas = document.getElementById('arCanvas');
+            elements.metricsOverlay = document.getElementById('metricsOverlay');
+            elements.currentAngle = document.getElementById('currentAngle');
+            elements.currentDistance = document.getElementById('currentDistance');
+            elements.currentSpeed = document.getElementById('currentSpeed');
+            elements.stabilityScore = document.getElementById('stabilityScore');
+            elements.straightnessScore = document.getElementById('straightnessScore');
+            elements.sessionTimer = document.getElementById('sessionTimer');
+            elements.angleValue = document.getElementById('angleValue');
+            elements.angleIndicator = document.getElementById('angleIndicator');
+            elements.eventLog = document.getElementById('eventLog');
+            elements.weldButton = document.getElementById('weldButton');
+            elements.weldProgress = document.getElementById('weldProgress');
+            elements.calibrationModal = document.getElementById('calibrationModal');
+            
+            // Event Listeners
+            elements.startButton.addEventListener('click', initApp);
+            elements.weldButton.addEventListener('mousedown', startWelding);
+            elements.weldButton.addEventListener('touchstart', startWelding);
+            elements.weldButton.addEventListener('mouseup', stopWelding);
+            elements.weldButton.addEventListener('touchend', stopWelding);
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            
+            // Botones de calibración
+            document.getElementById('saveCalibration')?.addEventListener('click', saveCalibration);
+            document.getElementById('autoCalibrate')?.addEventListener('click', autoCalibrate);
+            document.getElementById('toggleCamera')?.addEventListener('click', toggleCamera);
+            
+            // Cargar configuración guardada
+            loadSavedConfig();
+        });
+        
+        function onOpenCvReady() {
+            cv = window.cv;
+            elements.loadingStatus.textContent = 'OpenCV.js cargado ✅';
+            
+            // Crear buffers de audio
+            createAudioBuffers();
+            
+            // Mostrar botón de inicio
+            elements.startButton.style.display = 'block';
+        }
+        
+        // ============================================
+        // MANEJO DE AUDIO
+        // ============================================
+        
+        async function createAudioBuffers() {
+            try {
+                // Crear sonidos programáticamente (sin archivos externos)
+                highBeepBuffer = createBeepBuffer(800, 0.1);
+                lowBeepBuffer = createBeepBuffer(300, 0.1);
+                startBeepBuffer = createBeepBuffer(600, 0.05);
+                endBeepBuffer = createBeepBuffer(400, 0.2);
+                weldSoundBuffer = createNoiseBuffer(5.0);
+                
+                elements.loadingStatus.textContent += ' | Audio listo ✅';
+            } catch (error) {
+                console.warn('Audio no disponible:', error);
+                elements.loadingStatus.textContent += ' | Audio limitado';
+            }
+        }
+        
+        function createBeepBuffer(frequency, duration) {
+            const sampleRate = audioContext.sampleRate;
+            const frameCount = sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, frameCount, sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < frameCount; i++) {
+                data[i] = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 
+                         Math.exp(-i / (sampleRate * duration * 2));
+            }
+            
+            return buffer;
+        }
+        
+        function createNoiseBuffer(duration) {
+            const sampleRate = audioContext.sampleRate;
+            const frameCount = sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, frameCount, sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < frameCount; i++) {
+                // Ruido blanco con filtro paso bajo
+                data[i] = (Math.random() * 2 - 1) * 
+                         Math.exp(-i / (sampleRate * duration * 10)) * 0.3;
+            }
+            
+            return buffer;
+        }
+        
+        function playSound(buffer, volume = CONFIG.AUDIO_VOLUME) {
+            if (!buffer || audioContext.state === 'suspended') {
+                audioContext.resume();
+                return;
+            }
+            
+            const source = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            
+            source.buffer = buffer;
+            gainNode.gain.value = volume;
+            
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            source.start();
+            return source;
+        }
+        
+        function playWeldingSound() {
+            if (!weldSoundBuffer) return;
+            
+            weldSoundSource = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            
+            weldSoundSource.buffer = weldSoundBuffer;
+            weldSoundSource.loop = true;
+            gainNode.gain.value = CONFIG.AUDIO_VOLUME * 0.3;
+            
+            weldSoundSource.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            weldSoundSource.start();
+        }
+        
+        function stopWeldingSound() {
+            if (weldSoundSource) {
+                weldSoundSource.stop();
+                weldSoundSource = null;
+            }
+        }
+        
+        // ============================================
+        // INICIALIZACIÓN DE LA APP
+        // ============================================
+        
+        async function initApp() {
+            elements.startButton.style.display = 'none';
+            elements.loadingStatus.textContent = 'Solicitando acceso a cámara...';
+            
+            try {
+                // Solicitar cámara trasera
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: currentCamera,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    }
+                });
+                
+                elements.videoStream.srcObject = cameraStream;
+                
+                elements.videoStream.onloadedmetadata = () => {
+                    elements.loadingStatus.textContent = 'Configurando procesamiento...';
+                    
+                    // Configurar canvas
+                    canvas = elements.arCanvas;
+                    ctx = canvas.getContext('2d');
+                    
+                    const videoWidth = elements.videoStream.videoWidth;
+                    const videoHeight = elements.videoStream.videoHeight;
+                    
+                    canvas.width = videoWidth;
+                    canvas.height = videoHeight;
+                    
+                    // Mostrar interfaz
+                    elements.appContainer.style.display = 'block';
+                    elements.loadingScreen.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        elements.loadingScreen.style.display = 'none';
+                        startProcessing();
+                    }, 500);
+                    
+                    // Actualizar info de cámara
+                    const cameraInfo = document.getElementById('cameraInfo');
+                    if (cameraInfo) {
+                        cameraInfo.textContent = `Resolución: ${videoWidth}x${videoHeight}`;
+                    }
+                    
+                    addEventLog('✅ Cámara configurada correctamente');
+                };
+                
+            } catch (error) {
+                elements.loadingStatus.textContent = `Error: ${error.message}`;
+                elements.startButton.style.display = 'block';
+                addEventLog(`❌ Error de cámara: ${error.message}`);
+            }
+        }
+        
+        // ============================================
+        // PROCESAMIENTO DE VIDEO Y DETECCIÓN
+        // ============================================
+        
+        function startProcessing() {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            processFrame();
+        }
+        
+        function processFrame() {
+            if (!isProcessing || !cv) return;
+            
+            try {
+                // Crear imagen desde el video
+                const src = new cv.Mat(elements.videoStream.videoHeight, 
+                                      elements.videoStream.videoWidth, 
+                                      cv.CV_8UC4);
+                
+                const cap = new cv.VideoCapture(elements.videoStream);
+                cap.read(src);
+                
+                // Convertir a escala de grises
+                const gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                
+                // Detectar patrón de ajedrez
+                const patternSize = new cv.Size(CONFIG.PATTERN_SIZE.cols - 1, 
+                                               CONFIG.PATTERN_SIZE.rows - 1);
+                const corners = new cv.Mat();
+                const found = cv.findChessboardCorners(gray, patternSize, corners,
+                    cv.CALIB_CB_ADAPTIVE_THRESH + cv.CALIB_CB_NORMALIZE_IMAGE + cv.CALIB_CB_FAST_CHECK);
+                
+                if (found) {
+                    // Refinar detección de esquinas
+                    const termCriteria = new cv.TermCriteria(cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_COUNT, 30, 0.1);
+                    cv.cornerSubPix(gray, corners, new cv.Size(11, 11), new cv.Size(-1, -1), termCriteria);
+                    
+                    // Calcular pose
+                    const objectPoints = createObjectPoints();
+                    const cameraMatrix = estimateCameraMatrix();
+                    const distCoeffs = new cv.Mat.zeros(5, 1, cv.CV_64F);
+                    
+                    const rvec = new cv.Mat();
+                    const tvec = new cv.Mat();
+                    
+                    cv.solvePnP(objectPoints, corners, cameraMatrix, distCoeffs, rvec, tvec);
+                    
+                    // Actualizar pose actual
+                    updatePose(rvec, tvec);
+                    
+                    // Dibujar overlay
+                    drawOverlay(src, corners, patternSize);
+                    
+                    // Limpiar matrices
+                    rvec.delete();
+                    tvec.delete();
+                    distCoeffs.delete();
+                    cameraMatrix.delete();
+                } else {
+                    // Patrón no detectado
+                    handlePatternNotFound();
+                }
+                
+                // Dibujar guías visuales
+                drawVisualGuides();
+                
+                // Limpiar memoria
+                src.delete();
+                gray.delete();
+                corners.delete();
+                
+                // Procesar siguiente frame
+                requestAnimationFrame(processFrame);
+                
+            } catch (error) {
+                console.error('Error en procesamiento:', error);
+                setTimeout(processFrame, CONFIG.PROCESS_INTERVAL);
+            }
+        }
+        
+        function createObjectPoints() {
+            const points = [];
+            const squareSize = CONFIG.SQUARE_SIZE;
+            
+            for (let i = 0; i < CONFIG.PATTERN_SIZE.rows - 1; i++) {
+                for (let j = 0; j < CONFIG.PATTERN_SIZE.cols - 1; j++) {
+                    points.push(new cv.Point3(j * squareSize, i * squareSize, 0));
+                }
+            }
+            
+            return cv.matFromArray(points.length, 3, cv.CV_64F, 
+                points.flatMap(p => [p.x, p.y, p.z]));
+        }
+        
+        function estimateCameraMatrix() {
+            const fx = 800; // Valor inicial, se calibrará
+            const fy = 800;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            return cv.matFromArray(3, 3, cv.CV_64F, [
+                fx, 0, cx,
+                0, fy, cy,
+                0, 0, 1
+            ]);
+        }
+        
+        function updatePose(rvec, tvec) {
+            const rotationMatrix = new cv.Mat();
+            cv.Rodrigues(rvec, rotationMatrix);
+            
+            // Extraer ángulos de Euler
+            const eulerAngles = rotationMatrixToEuler(rotationMatrix);
+            currentAngle = Math.abs(eulerAngles.x * (180 / Math.PI));
+            
+            // Calcular distancia
+            const tx = tvec.data64F[0];
+            const ty = tvec.data64F[1];
+            const tz = tvec.data64F[2];
+            currentDistance = Math.sqrt(tx*tx + ty*ty + tz*tz);
+            
+            // Guardar en historial
+            const timestamp = Date.now();
+            const pose = {
+                timestamp,
+                rotation: eulerAngles,
+                translation: { x: tx, y: ty, z: tz },
+                distance: currentDistance
+            };
+            
+            poseHistory.push(pose);
+            if (poseHistory.length > CONFIG.HISTORY_SIZE) {
+                poseHistory.shift();
+            }
+            
+            // Calcular velocidades
+            calculateVelocities();
+            
+            // Calcular métricas de calidad
+            calculateQualityMetrics();
+            
+            // Actualizar UI
+            updateMetricsDisplay();
+            
+            // Verificar alarmas
+            checkAlarms();
+            
+            rotationMatrix.delete();
+        }
+        
+        function rotationMatrixToEuler(R) {
+            const sy = Math.sqrt(R.data64F[0] * R.data64F[0] + R.data64F[3] * R.data64F[3]);
+            
+            const x = Math.atan2(R.data64F[7], R.data64F[8]);
+            const y = Math.atan2(-R.data64F[6], sy);
+            const z = Math.atan2(R.data64F[3], R.data64F[0]);
+            
+            return { x, y, z };
+        }
+        
+        function calculateVelocities() {
+            if (poseHistory.length < 2) return;
+            
+            const lastPose = poseHistory[poseHistory.length - 2];
+            const currentPose = poseHistory[poseHistory.length - 1];
+            
+            const dt = (currentPose.timestamp - lastPose.timestamp) / 1000; // segundos
+            if (dt === 0) return;
+            
+            // Velocidad lineal
+            const dx = currentPose.translation.x - lastPose.translation.x;
+            const dy = currentPose.translation.y - lastPose.translation.y;
+            const dz = currentPose.translation.z - lastPose.translation.z;
+            
+            currentSpeed = Math.sqrt(dx*dx + dy*dy + dz*dz) / dt;
+            
+            // Velocidad angular
+            const dAngle = Math.abs(currentPose.rotation.x - lastPose.rotation.x);
+            angularSpeed = (dAngle * 180 / Math.PI) / dt;
+        }
+        
+        function calculateQualityMetrics() {
+            if (poseHistory.length < 10) return;
+            
+            // Calcular estabilidad (desviación estándar del ángulo)
+            const angles = poseHistory.slice(-10).map(p => p.rotation.x);
+            const mean = angles.reduce((a, b) => a + b) / angles.length;
+            const variance = angles.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / angles.length;
+            const stdDev = Math.sqrt(variance);
+            
+            stabilityScore = Math.max(0, 100 - (stdDev * 500));
+            
+            // Calcular rectitud (desviación de línea recta en movimiento XY)
+            if (poseHistory.length >= 3) {
+                const positions = poseHistory.slice(-10).map(p => ({
+                    x: p.translation.x,
+                    y: p.translation.y
+                }));
+                
+                const first = positions[0];
+                const last = positions[positions.length - 1];
+                
+                // Ecuación de la línea: Ax + By + C = 0
+                const A = last.y - first.y;
+                const B = first.x - last.x;
+                const C = last.x * first.y - first.x * last.y;
+                
+                const denom = Math.sqrt(A*A + B*B);
+                let totalDeviation = 0;
+                
+                for (let i = 1; i < positions.length - 1; i++) {
+                    const p = positions[i];
+                    const deviation = Math.abs(A * p.x + B * p.y + C) / denom;
+                    totalDeviation += deviation;
+                }
+                
+                const avgDeviation = totalDeviation / (positions.length - 2);
+                straightnessScore = Math.max(0, 100 - (avgDeviation * 1000));
+            }
+        }
+        
+        // ============================================
+        // DIBUJADO Y VISUALIZACIÓN
+        // ============================================
+        
+        function drawOverlay(src, corners, patternSize) {
+            // Dibujar esquinas detectadas
+            cv.drawChessboardCorners(src, patternSize, corners, true);
+            
+            // Convertir a RGBA para canvas
+            const rgba = new cv.Mat();
+            cv.cvtColor(src, rgba, cv.COLOR_RGB2RGBA);
+            
+            // Dibujar en canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(
+                cv.imshow(canvas, rgba),
+                0, 0, canvas.width, canvas.height,
+                0, 0, canvas.width, canvas.height
+            );
+            
+            rgba.delete();
+        }
+        
+        function drawVisualGuides() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Dibujar retícula central
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(centerX - 20, centerY);
+            ctx.lineTo(centerX + 20, centerY);
+            ctx.moveTo(centerX, centerY - 20);
+            ctx.lineTo(centerX, centerY + 20);
+            ctx.stroke();
+            
+            // Dibujar guía de ángulo si está disponible
+            if (currentAngle > 0) {
+                const angleRad = (currentAngle - 90) * Math.PI / 180;
+                const length = 100;
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(
+                    centerX + Math.cos(angleRad) * length,
+                    centerY + Math.sin(angleRad) * length
+                );
+                
+                // Color según rango óptimo
+                if (currentAngle >= CONFIG.OPTIMAL_ANGLE.min && 
+                    currentAngle <= CONFIG.OPTIMAL_ANGLE.max) {
+                    ctx.strokeStyle = '#0f0';
+                } else if (currentAngle < CONFIG.OPTIMAL_ANGLE.min) {
+                    ctx.strokeStyle = '#ff0';
+                } else {
+                    ctx.strokeStyle = '#f00';
+                }
+                
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+        }
+        
+        function handlePatternNotFound() {
+            // Dibujar mensaje de ayuda
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+            
+            ctx.fillStyle = '#ff0';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🔍 Patrón no detectado', canvas.width / 2, canvas.height - 70);
+            ctx.fillText('Asegúrate de que el patrón 4×4 esté visible', canvas.width / 2, canvas.height - 45);
+            ctx.fillText('Buena iluminación y enfoque', canvas.width / 2, canvas.height - 20);
+            
+            // Mostrar botón de calibración
+            if (!isCalibrating) {
+                showCalibrationModal();
+            }
+        }
+        
+        // ============================================
+        // ACTUALIZACIÓN DE UI
+        // ============================================
+        
+        function updateMetricsDisplay() {
+            // Actualizar valores numéricos
+            elements.currentAngle.textContent = `${currentAngle.toFixed(1)}°`;
+            elements.currentDistance.textContent = `${(currentDistance * 100).toFixed(1)} cm`;
+            elements.currentSpeed.textContent = `${(currentSpeed * 100).toFixed(1)} cm/s`;
+            elements.stabilityScore.textContent = `${stabilityScore.toFixed(0)}%`;
+            elements.straightnessScore.textContent = `${straightnessScore.toFixed(0)}%`;
+            elements.angleValue.textContent = `${currentAngle.toFixed(1)}°`;
+            
+            // Actualizar colores según calidad
+            updateMetricColor(elements.currentAngle, currentAngle, 
+                            CONFIG.OPTIMAL_ANGLE.min, CONFIG.OPTIMAL_ANGLE.max);
+            updateMetricColor(elements.stabilityScore, stabilityScore, 70, 100);
+            updateMetricColor(elements.straightnessScore, straightnessScore, 70, 100);
+            
+            // Actualizar indicador de ángulo
+            updateAngleIndicator();
+            
+            // Actualizar timer si hay evaluación activa
+            if (evaluationSession.active) {
+                const elapsed = Date.now() - evaluationSession.startTime;
+                const minutes = Math.floor(elapsed / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+                elements.sessionTimer.textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+        
+        function updateMetricColor(element, value, min, max) {
+            element.classList.remove('good', 'warning', 'error');
+            
+            if (value >= min && value <= max) {
+                element.classList.add('good');
+            } else if (value >= min * 0.8 && value <= max * 1.2) {
+                element.classList.add('warning');
+            } else {
+                element.classList.add('error');
+            }
+        }
+        
+        function updateAngleIndicator() {
+            const indicator = elements.angleIndicator;
+            indicator.style.borderColor = getAngleColor(currentAngle);
+            
+            // Efecto de pulso si está fuera de rango
+            if (currentAngle < CONFIG.OPTIMAL_ANGLE.min || 
+                currentAngle > CONFIG.OPTIMAL_ANGLE.max) {
+                indicator.style.animation = 'pulse 0.5s infinite alternate';
+            } else {
+                indicator.style.animation = '';
+            }
+        }
+        
+        function getAngleColor(angle) {
+            if (angle >= CONFIG.OPTIMAL_ANGLE.min && angle <= CONFIG.OPTIMAL_ANGLE.max) {
+                return 'rgba(0, 255, 0, 0.7)';
+            } else if (angle < CONFIG.OPTIMAL_ANGLE.min) {
+                return 'rgba(255, 255, 0, 0.7)';
+            } else {
+                return 'rgba(255, 0, 0, 0.7)';
+            }
+        }
+        
+        function addEventLog(message) {
+            const log = elements.eventLog;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            
+            // Limitar tamaño del log
+            if (log.children.length > 10) {
+                log.removeChild(log.firstChild);
+            }
+        }
+        
+        // ============================================
+        // ALARMAS Y FEEDBACK
+        // ============================================
+        
+        function checkAlarms() {
+            if (!isWelding) return;
+            
+            // Alarma por ángulo fuera de rango
+            if (currentAngle < CONFIG.OPTIMAL_ANGLE.min) {
+                playSound(lowBeepBuffer, 0.3);
+                addEventLog(`⚠️ Ángulo muy bajo: ${currentAngle.toFixed(1)}°`);
+            } else if (currentAngle > CONFIG.OPTIMAL_ANGLE.max) {
+                playSound(highBeepBuffer, 0.3);
+                addEventLog(`⚠️ Ángulo muy alto: ${currentAngle.toFixed(1)}°`);
+            }
+            
+            // Alarma por distancia incorrecta
+            const idealDistance = CONFIG.OPTIMAL_DISTANCE;
+            const distanceError = Math.abs(currentDistance - idealDistance) / idealDistance;
+            
+            if (distanceError > CONFIG.WARNING_THRESHOLD) {
+                addEventLog(`⚠️ Distancia incorrecta: ${(currentDistance * 100).toFixed(1)} cm`);
+            }
+        }
+        
+        // ============================================
+        // EVALUACIÓN DE SOLDADURA
+        // ============================================
+        
+        function startWelding() {
+            if (isWelding) return;
+            
+            isWelding = true;
+            elements.weldButton.classList.add('active');
+            playSound(startBeepBuffer);
+            playWeldingSound();
+            
+            // Iniciar evaluación si no está activa
+            if (!evaluationSession.active) {
+                evaluationSession = {
+                    active: true,
+                    startTime: Date.now(),
+                    dataPoints: [],
+                    events: [],
+                    weldDuration: 0
+                };
+                addEventLog('▶️ Inicio de evaluación');
+            }
+            
+            addEventLog('🔥 Soldadura iniciada');
+            
+            // Registrar evento
+            evaluationSession.events.push({
+                type: 'weld_start',
+                timestamp: Date.now(),
+                angle: currentAngle,
+                distance: currentDistance
+            });
+            
+            // Iniciar progreso
+            updateWeldProgress();
+        }
+        
+        function stopWelding() {
+            if (!isWelding) return;
+            
+            isWelding = false;
+            elements.weldButton.classList.remove('active');
+            playSound(endBeepBuffer);
+            stopWeldingSound();
+            
+            // Actualizar duración
+            if (evaluationSession.active) {
+                evaluationSession.weldDuration = Date.now() - evaluationSession.startTime;
+                
+                evaluationSession.events.push({
+                    type: 'weld_stop',
+                    timestamp: Date.now(),
+                    duration: evaluationSession.weldDuration
+                });
+                
+                addEventLog('⏹️ Soldadura detenida');
+                
+                // Preguntar si finalizar evaluación
+                setTimeout(() => {
+                    if (confirm('¿Finalizar evaluación y descargar resultados?')) {
+                        finishEvaluation();
+                    }
+                }, 500);
+            }
+        }
+        
+        function updateWeldProgress() {
+            if (!isWelding) {
+                elements.weldProgress.style.width = '0%';
+                return;
+            }
+            
+            const elapsed = Date.now() - evaluationSession.startTime;
+            const progress = Math.min(100, (elapsed / 30000) * 100); // 30 segundos máximo
+            
+            elements.weldProgress.style.width = `${progress}%`;
+            
+            // Registrar punto de datos
+            if (evaluationSession.active) {
+                evaluationSession.dataPoints.push({
+                    timestamp: elapsed,
+                    angle: currentAngle,
+                    distance: currentDistance,
+                    speed: currentSpeed,
+                    angularSpeed: angularSpeed,
+                    stability: stabilityScore,
+                    straightness: straightnessScore
+                });
+            }
+            
+            // Continuar progreso
+            requestAnimationFrame(updateWeldProgress);
+        }
+        
+        function finishEvaluation() {
+            if (!evaluationSession.active) return;
+            
+            evaluationSession.active = false;
+            
+            // Calcular métricas finales
+            const metrics = calculateFinalMetrics();
+            
+            // Exportar resultados
+            exportResults(metrics);
+            
+            // Mostrar resumen
+            showEvaluationSummary(metrics);
+            
+            addEventLog('📊 Evaluación finalizada');
+        }
+        
+        function calculateFinalMetrics() {
+            const data = evaluationSession.dataPoints;
+            if (data.length === 0) return null;
+            
+            const angles = data.map(d => d.angle);
+            const distances = data.map(d => d.distance);
+            const stabilities = data.map(d => d.stability);
+            
+            const avgAngle = angles.reduce((a, b) => a + b) / angles.length;
+            const avgDistance = distances.reduce((a, b) => a + b) / distances.length;
+            const avgStability = stabilities.reduce((a, b) => a + b) / stabilities.length;
+            
+            // Puntaje basado en tiempo en rango óptimo
+            const timeInRange = data.filter(d => 
+                d.angle >= CONFIG.OPTIMAL_ANGLE.min && 
+                d.angle <= CONFIG.OPTIMAL_ANGLE.max
+            ).length / data.length * 100;
+            
+            return {
+                duration: evaluationSession.weldDuration,
+                avgAngle,
+                avgDistance,
+                avgStability,
+                timeInRange,
+                dataPoints: data.length,
+                events: evaluationSession.events
+            };
+        }
+        
+        // ============================================
+        // EXPORTACIÓN Y ALMACENAMIENTO
+        // ============================================
+        
+        function exportResults(metrics) {
+            if (!metrics) return;
+            
+            // Crear CSV
+            const headers = ['Timestamp(ms)', 'Angle(deg)', 'Distance(m)', 'Speed(m/s)', 'Stability(%)', 'Straightness(%)'];
+            const csvRows = [headers.join(',')];
+            
+            evaluationSession.dataPoints.forEach(point => {
+                const row = [
+                    point.timestamp,
+                    point.angle.toFixed(2),
+                    point.distance.toFixed(3),
+                    point.speed.toFixed(3),
+                    point.stability.toFixed(1),
+                    point.straightness.toFixed(1)
+                ];
+                csvRows.push(row.join(','));
+            });
+            
+            // Agregar métricas finales
+            csvRows.push('');
+            csvRows.push('RESUMEN');
+            csvRows.push(`Duración total,${metrics.duration}ms`);
+            csvRows.push(`Ángulo promedio,${metrics.avgAngle.toFixed(2)}°`);
+            csvRows.push(`Distancia promedio,${(metrics.avgDistance * 100).toFixed(1)}cm`);
+            csvRows.push(`Estabilidad promedio,${metrics.avgStability.toFixed(1)}%`);
+            csvRows.push(`Tiempo en rango óptimo,${metrics.timeInRange.toFixed(1)}%`);
+            
+            const csvContent = csvRows.join('\n');
+            
+            // Crear y descargar archivo
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            
+            a.href = url;
+            a.download = `soldadura_evaluacion_${Date.now()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            addEventLog('📥 Resultados descargados como CSV');
+        }
+        
+        function saveCalibration() {
+            const squareSize = parseFloat(document.getElementById('squareSize').value) / 1000; // mm a m
+            const minAngle = parseFloat(document.getElementById('minAngle').value);
+            const maxAngle = parseFloat(document.getElementById('maxAngle').value);
+            const idealDistance = parseFloat(document.getElementById('idealDistance').value) / 100; // cm a m
+            
+            CONFIG.SQUARE_SIZE = squareSize;
+            CONFIG.OPTIMAL_ANGLE = { min: minAngle, max: maxAngle };
+            CONFIG.OPTIMAL_DISTANCE = idealDistance;
+            
+            // Guardar en localStorage
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({
+                squareSize,
+                optimalAngle: { min: minAngle, max: maxAngle },
+                optimalDistance: idealDistance
+            }));
+            
+            hideCalibrationModal();
+            addEventLog('⚙️ Calibración guardada');
+        }
+        
+        function loadSavedConfig() {
+            const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    Object.assign(CONFIG, config);
+                    
+                    // Actualizar inputs si existen
+                    if (document.getElementById('squareSize')) {
+                        document.getElementById('squareSize').value = (config.squareSize * 1000);
+                        document.getElementById('minAngle').value = config.optimalAngle.min;
+                        document.getElementById('maxAngle').value = config.optimalAngle.max;
+                        document.getElementById('idealDistance').value = (config.optimalDistance * 100);
+                    }
+                } catch (e) {
+                    console.warn('Error cargando configuración:', e);
+                }
+            }
+        }
+        
+        // ============================================
+        // CALIBRACIÓN
+        // ============================================
+        
+        function showCalibrationModal() {
+            elements.calibrationModal.style.display = 'flex';
+            isCalibrating = true;
+        }
+        
+        function hideCalibrationModal() {
+            elements.calibrationModal.style.display = 'none';
+            isCalibrating = false;
+        }
+        
+        async function autoCalibrate() {
+            addEventLog('🤖 Iniciando calibración automática...');
+            
+            // Simular calibración automática
+            // En una implementación real, esto analizaría múltiples frames
+            setTimeout(() => {
+                CONFIG.SQUARE_SIZE = 0.25; // 250mm
+                CONFIG.OPTIMAL_ANGLE = { min: 5, max: 15 };
+                CONFIG.OPTIMAL_DISTANCE = 0.1; // 10cm
+                
+                // Actualizar inputs
+                document.getElementById('squareSize').value = 250;
+                document.getElementById('minAngle').value = 5;
+                document.getElementById('maxAngle').value = 15;
+                document.getElementById('idealDistance').value = 10;
+                
+                addEventLog('✅ Calibración automática completada');
+            }, 2000);
+        }
+        
+        async function toggleCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            
+            currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+            
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: currentCamera,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                elements.videoStream.srcObject = cameraStream;
+                addEventLog(`📷 Cambiada a cámara ${currentCamera === 'environment' ? 'trasera' : 'frontal'}`);
+            } catch (error) {
+                addEventLog(`❌ Error cambiando cámara: ${error.message}`);
+            }
+        }
+        
+        // ============================================
+        // MANEJO DE TECLADO (BOTONES DE VOLUMEN)
+        // ============================================
+        
+        function handleKeyDown(event) {
+            if (event.key === 'VolumeUp' || event.key === 'VolumeDown') {
+                event.preventDefault();
+                startWelding();
+            }
+        }
+        
+        function handleKeyUp(event) {
+            if (event.key === 'VolumeUp' || event.key === 'VolumeDown') {
+                event.preventDefault();
+                stopWelding();
+            }
+        }
+        
+        // ============================================
+        // RESUMEN DE EVALUACIÓN
+        // ============================================
+        
+        function showEvaluationSummary(metrics) {
+            const summary = `
+                <div style="background:rgba(0,0,0,0.9); padding:20px; border-radius:15px; max-width:400px; margin:20px auto;">
+                    <h2 style="color:#0af; text-align:center;">📊 Resumen de Evaluación</h2>
+                    <div style="margin:15px 0;">
+                        <p><strong>Duración:</strong> ${(metrics.duration / 1000).toFixed(1)}s</p>
+                        <p><strong>Ángulo promedio:</strong> ${metrics.avgAngle.toFixed(1)}°</p>
+                        <p><strong>Distancia promedio:</strong> ${(metrics.avgDistance * 100).toFixed(1)}cm</p>
+                        <p><strong>Estabilidad:</strong> ${metrics.avgStability.toFixed(1)}%</p>
+                        <p><strong>Tiempo en rango óptimo:</strong> ${metrics.timeInRange.toFixed(1)}%</p>
+                    </div>
+                    <button onclick="this.parentElement.remove()" 
+                            style="width:100%; padding:10px; background:#0a6; color:white; border:none; border-radius:8px;">
+                        Cerrar
+                    </button>
+                </div>
+            `;
+            
+            const div = document.createElement('div');
+            div.style.position = 'fixed';
+            div.style.top = '50%';
+            div.style.left = '50%';
+            div.style.transform = 'translate(-50%, -50%)';
+            div.style.zIndex = '1003';
+            div.innerHTML = summary;
+            
+            document.body.appendChild(div);
+        }
+        
+        // ============================================
+        // MANIFEST PWA
+        // ============================================
+        
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(console.error);
+            });
+        }
+        
+        // Prevenir salida accidental
+        window.addEventListener('beforeunload', (event) => {
+            if (isWelding || evaluationSession.active) {
+                event.preventDefault();
+                event.returnValue = 'Hay una evaluación en curso. ¿Seguro que quieres salir?';
+            }
+        });
+        
+        // Manejar visibilidad de página
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isWelding) {
+                stopWelding();
+                addEventLog('⏸️ Aplicación en segundo plano, soldadura pausada');
+            }
+        });
+    </script>
+</body>
+</html>
