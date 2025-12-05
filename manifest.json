@@ -5,17 +5,5 @@
   "start_url": "./",
   "display": "standalone",
   "background_color": "#16213e",
-  "theme_color": "#0a6",
-  "icons": [
-    {
-      "src": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/svgs/solid/wrench.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBkPSJNNTEyIDE5Mkg0NDhWMzJjMC0xNy42Ny0xNC4zMy0zMi0zMi0zMkgzNkMxOC4zMyAwIDAgMTQuMzMgMCAzMnYzODRjMCA1My4wMiA0Mi45OCA5NiA5NiA5NmgzMjBjNTMuMDIgMCA5Ni00Mi45OCA5Ni05NlYzMjBjMC0zNS4zNS0yOC42NS02NC02NC02NHptLTY0IDI1Nkg5NmMtMTcuNjcgMC0zMi0xNC4zMy0zMi0zMlYxMjhoMTkydi05NmgxOTJ2MzIwaC05NnY5NnptMC0xOTJoLTEyOHYtNjRoMTI4djY0eiIgZmlsbD0iIzE2MjEzZSIvPjwvc3ZnPg==",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
-    }
-  ]
+  "theme_color": "#0a6"
 }
